@@ -11,6 +11,7 @@ CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 AI_API_KEY = os.getenv("AI_API_KEY")
 
+CHAT_ID = os.getenv("CHAT_ID")
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN is missing")

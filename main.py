@@ -1,8 +1,8 @@
 import asyncio
 
 from rss import get_news
-from ai import rewrite_news
-from telegram_bot import publish
+from ai import rewrite_news, generate_video_ideas
+from telegram_bot import publish, publish_ideas
 
 
 
@@ -20,9 +20,11 @@ async def job():
 
 
     content = await rewrite_news(news)
+    idea = await generate_video_ideas(news)
 
 
     await publish(content)
+    await publish_ideas(idea)
 
 
 

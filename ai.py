@@ -62,3 +62,63 @@ async def rewrite_news(news):
         data=response.json()
 
         return data["choices"][0]["message"]["content"]
+
+async def generate_video_ideas(topics):
+
+    prompt = f"""
+أنت خبير صناعة محتوى يوتيوب في مجال الأمن السيبراني.
+
+الجمهور:
+- مبتدئون
+- مهتمون بـ Termux و Linux و Kali Linux
+- يحبون معرفة الأدوات والأخبار التقنية
+
+حول هذه المواضيع إلى أفكار فيديوهات:
+
+{topics}
+
+
+لكل فكرة اكتب:
+
+🎥 عنوان جذاب:
+💡 الفكرة:
+📚 ماذا سيتعلم المشاهد:
+⏱ مدة مناسبة:
+🏷 مستوى الصعوبة:
+
+اختر أفكار تعليمية وآمنة.
+لا تقدم خطوات اختراق ضارة.
+"""
+
+
+    headers = {
+        "Authorization": f"Bearer {AI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+
+    body = {
+        "model": "llama-3.1-8b-instant",
+
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    }
+
+
+    async with httpx.AsyncClient() as client:
+
+        response = await client.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers=headers,
+            json=body
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        return data["choices"][0]["message"]["content"]
