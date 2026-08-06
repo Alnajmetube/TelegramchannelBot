@@ -36,6 +36,7 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
 
         run: |
           python main.py
