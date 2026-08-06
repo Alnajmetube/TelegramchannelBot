@@ -16,7 +16,8 @@ KEYWORDS = [
     "vulnerability",
     "exploit",
     "tool",
-    "linux"
+    "linux",
+    "termux"
 ]
 
 
