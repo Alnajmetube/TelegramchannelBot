@@ -1,5 +1,10 @@
 import httpx
+
 from config import AI_API_KEY
+
+
+API_URL = "https://openrouter.ai/api/v1/chat/completions"
+MODEL = "openai/gpt-oss-20b"
 
 
 async def rewrite_news(news):
@@ -24,44 +29,43 @@ async def rewrite_news(news):
 - لماذا يهم المهتمين بالأمن السيبراني
 - لا تستخدم مصطلحات معقدة بدون شرح
 - اجعل المنشور أقل من 500 كلمة
-
 """
-
 
     headers = {
         "Authorization": f"Bearer {AI_API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/",
+        "X-Title": "Cybersecurity News Bot",
     }
-
 
     body = {
-
-        "model":"llama-3.1-8b-instant",
-
-        "messages":[
+        "model": MODEL,
+        "messages": [
             {
-                "role":"user",
-                "content":prompt
+                "role": "user",
+                "content": prompt,
             }
-        ]
-
+        ],
     }
 
-
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=60) as client:
 
         response = await client.post(
-            "https://api.groq.com/openai/v1/chat/completions",
+            API_URL,
             headers=headers,
-            json=body
+            json=body,
         )
 
+        if response.status_code != 200:
+            print("OpenRouter API Error:")
+            print(response.text)
 
         response.raise_for_status()
 
-        data=response.json()
+        data = response.json()
 
         return data["choices"][0]["message"]["content"]
+
 
 async def generate_video_ideas(topics):
 
@@ -77,7 +81,6 @@ async def generate_video_ideas(topics):
 
 {topics}
 
-
 لكل فكرة اكتب:
 
 🎥 عنوان جذاب:
@@ -90,32 +93,34 @@ async def generate_video_ideas(topics):
 لا تقدم خطوات اختراق ضارة.
 """
 
-
     headers = {
         "Authorization": f"Bearer {AI_API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/",
+        "X-Title": "Cybersecurity News Bot",
     }
 
-
     body = {
-        "model": "llama-3.1-8b-instant",
-
+        "model": MODEL,
         "messages": [
             {
                 "role": "user",
-                "content": prompt
+                "content": prompt,
             }
-        ]
+        ],
     }
 
-
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=60) as client:
 
         response = await client.post(
-            "https://api.groq.com/openai/v1/chat/completions",
+            API_URL,
             headers=headers,
-            json=body
+            json=body,
         )
+
+        if response.status_code != 200:
+            print("OpenRouter API Error:")
+            print(response.text)
 
         response.raise_for_status()
 
