@@ -24,14 +24,6 @@ def _chunks(text: str, limit: int) -> list[str]:
         remaining = remaining[cut:].lstrip()
     return chunks
 
-    if not image_bytes:
-        await bot.send_message(
-            chat_id=CHANNEL_ID,
-            text=text,
-            parse_mode="Markdown"
-        )
-        return
-
 async def publish(text: str, image_bytes: bytes | None = None) -> None:
     """Publish a post, splitting it safely within Telegram's limits."""
     if not text or not text.strip():
