@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+CF_ACCOUNT_ID = "cd257b679b57bcc5f62fd8e1ae13081d"
+CF_API_TOKEN = "cfut_VvpEADYW2oK67wumKkZE2NWwJ81RTRXwoI6VwTTVb24b19b1"
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
