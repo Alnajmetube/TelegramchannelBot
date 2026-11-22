@@ -21,6 +21,8 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODEL = "openai/gpt-oss-20b"
 
 async def _chat(messages: list[dict[str, str]], *, max_tokens: int = 900) -> str:
     payload = {
