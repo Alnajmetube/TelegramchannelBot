@@ -28,7 +28,7 @@ import httpx
 ENTRIES_PER_FEED = 30
 
 # Ignore articles older than this number of days.
-MAX_AGE_DAYS = 10
+MAX_AGE_DAYS = 3
 
 # Number of best articles used for final random selection.
 TOP_POOL_SIZE = 10
@@ -58,7 +58,6 @@ RSS_FEEDS = [
     # --------------------------------------------------------
     # General Cybersecurity News
     # --------------------------------------------------------
-    "https://feeds.feedburner.com/TheHackersNews",
     "https://www.bleepingcomputer.com/feed/",
     "https://krebsonsecurity.com/feed/",
     "https://www.securityweek.com/feed/",
@@ -69,14 +68,11 @@ RSS_FEEDS = [
     # --------------------------------------------------------
     "https://hackread.com/feed/",
     "https://grahamcluley.com/feed/",
-    "https://www.tripwire.com/blog/feed",
-    "https://risky.biz/feeds/latest/",
 
     # --------------------------------------------------------
     # OSINT / Investigations
     # --------------------------------------------------------
     "https://www.bellingcat.com/feed/",
-    "https://osintcurio.us/feed/",
 
     # --------------------------------------------------------
     # Linux / Kali / Practical Security
@@ -87,10 +83,10 @@ RSS_FEEDS = [
     # --------------------------------------------------------
     # Hack The Box
     # --------------------------------------------------------
-    "https://www.hackthebox.com/rss/blog/red-teaming",
-    "https://www.hackthebox.com/rss/blog/write-ups",
-    "https://www.hackthebox.com/rss/blog/threat-intelligence",
-    "https://www.hackthebox.com/rss/blog/security-101",
+    "https://www.hackthebox.com/blog/tag/red-teaming/rss.xml",
+    "https://www.hackthebox.com/blog/tag/write-ups/rss.xml",
+    "https://www.hackthebox.com/blog/tag/threat-intelligence/rss.xml",
+    "https://www.hackthebox.com/blog/tag/security-101/rss.xml",
 
     # --------------------------------------------------------
     # Web Security / Burp Suite
@@ -136,11 +132,6 @@ RSS_FEEDS = [
 SOURCE_METADATA = {
 
     # High-priority general security
-    "https://feeds.feedburner.com/TheHackersNews": {
-        "name": "The Hacker News",
-        "weight": 1.05,
-    },
-
     "https://www.bleepingcomputer.com/feed/": {
         "name": "BleepingComputer",
         "weight": 1.10,
@@ -172,25 +163,10 @@ SOURCE_METADATA = {
         "weight": 0.95,
     },
 
-    "https://www.tripwire.com/blog/feed": {
-        "name": "Tripwire",
-        "weight": 0.90,
-    },
-
-    "https://risky.biz/feeds/latest/": {
-        "name": "Risky Business",
-        "weight": 1.05,
-    },
-
     # OSINT
     "https://www.bellingcat.com/feed/": {
         "name": "Bellingcat",
         "weight": 1.10,
-    },
-
-    "https://osintcurio.us/feed/": {
-        "name": "OSINT Curious",
-        "weight": 1.05,
     },
 
     # Practical / tools
@@ -205,22 +181,22 @@ SOURCE_METADATA = {
     },
 
     # Hack The Box
-    "https://www.hackthebox.com/rss/blog/red-teaming": {
+    "https://www.hackthebox.com/blog/tag/red-teaming/rss.xml": {
         "name": "Hack The Box - Red Teaming",
         "weight": 1.10,
     },
 
-    "https://www.hackthebox.com/rss/blog/write-ups": {
+    "https://www.hackthebox.com/blog/tag/write-ups/rss.xml": {
         "name": "Hack The Box - Writeups",
         "weight": 1.20,
     },
 
-    "https://www.hackthebox.com/rss/blog/threat-intelligence": {
+    "https://www.hackthebox.com/blog/tag/threat-intelligence/rss.xml": {
         "name": "Hack The Box - Threat Intelligence",
         "weight": 1.10,
     },
 
-    "https://www.hackthebox.com/rss/blog/security-101": {
+    "https://www.hackthebox.com/blog/tag/security-101/rss.xml": {
         "name": "Hack The Box - Security 101",
         "weight": 1.05,
     },
@@ -1469,12 +1445,15 @@ def get_news():
     # Fetch feeds
     # --------------------------------------------------------
     feed_urls = unique_feed_urls()
+    reachable_feeds = 0
+    recently_updated_feeds = 0
     with ThreadPoolExecutor(max_workers=8) as executor:
         pending_feeds = {url: executor.submit(fetch_feed, url) for url in feed_urls}
 
         for url, future in pending_feeds.items():
             try:
                 feed = future.result()
+                reachable_feeds += 1
 
                 # Feed errors can sometimes be exposed through
                 # feedparser's bozo flag.
@@ -1494,6 +1473,12 @@ def get_news():
                     "entries",
                     []
                 )
+
+                if any(
+                    get_entry_datetime(item) is not None and is_recent(item)
+                    for item in entries[:ENTRIES_PER_FEED]
+                ):
+                    recently_updated_feeds += 1
 
                 for item in entries[
                     :ENTRIES_PER_FEED
@@ -1600,6 +1585,12 @@ def get_news():
                     print(
                         f"RSS error: {url} -> {e}"
                     )
+
+    if VERBOSE:
+        print(
+            f"RSS check: {reachable_feeds}/{len(feed_urls)} feeds reachable; "
+            f"{recently_updated_feeds} have dated entries published within {MAX_AGE_DAYS} days."
+        )
 
     # --------------------------------------------------------
     # Nothing found
