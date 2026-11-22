@@ -1,2 +1,25 @@
+# Environment variables and local secrets
 .env
+.env.*
+!.env.example
+
+# Python
 __pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Runtime state and temporary files
+.news_history.json
+.news_history.json.tmp
+*.log
+
+# Local tooling and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

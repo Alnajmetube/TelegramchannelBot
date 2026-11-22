@@ -1,38 +1,49 @@
-name: Cyber News Bot
+name: Telegram Channel Publisher
 
 on:
   schedule:
     - cron: "0 20 * * *"
-
   workflow_dispatch:
-
   push:
     branches:
       - main
 
-jobs:
-  run:
-    runs-on: ubuntu-latest
+permissions:
+  contents: read
 
+concurrency:
+  group: telegram-channel-publisher
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Restore publication history
+        uses: actions/cache@v4
+        with:
+          path: .news_history.json
+          key: news-history-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            news-history-
+
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+        run: python -m pip install -r requirements.txt
 
-      - name: Run bot
+      - name: Create one fresh Arabic channel post
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
-          AI_API_KEY: ${{ secrets.AI_API_KEY }}
-          CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: |
-          python main.py
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: python main.py

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -16,6 +17,7 @@ from urllib.parse import (
 )
 
 import feedparser
+import httpx
 
 
 # ============================================================
@@ -32,10 +34,10 @@ MAX_AGE_DAYS = 10
 TOP_POOL_SIZE = 10
 
 # Do not select the same story again during this period.
-SEEN_COOLDOWN_DAYS = 5
+SEEN_COOLDOWN_DAYS = 180
 
 # Maximum number of records stored in history.
-MAX_HISTORY_ITEMS = 500
+MAX_HISTORY_ITEMS = 1000
 
 # Set True to see RSS errors in terminal.
 VERBOSE = True
@@ -1161,8 +1163,8 @@ def cleanup_history(history):
     # Keep a longer history than the cooldown
     # for better duplicate detection.
     retention_days = max(
-        SEEN_COOLDOWN_DAYS * 3,
-        15
+        SEEN_COOLDOWN_DAYS * 2,
+        365
     )
 
     for item in history:
@@ -1270,10 +1272,12 @@ def is_recently_seen(article, history):
         ):
             continue
 
-        # Exact story match.
-        if item.get(
-            "fingerprint"
-        ) == fingerprint:
+        # Match canonical URLs as well as normalized titles.
+        article_link = canonicalize_url(article.get("link", ""))
+        if article_link and item.get("link") == article_link:
+            return True
+
+        if item.get("fingerprint") == fingerprint:
             return True
 
         # Fuzzy match.
@@ -1293,6 +1297,12 @@ def is_recently_seen(article, history):
                 return True
 
     return False
+
+
+def get_recent_titles():
+    """Return recent published titles for prompt-level repetition avoidance."""
+    history = cleanup_history(load_history())
+    return [item.get("title", "") for item in history if item.get("title")]
 
 
 def remember_article(article):
@@ -1411,6 +1421,18 @@ def clean_summary(summary: str) -> str:
 # MAIN NEWS FETCHER
 # ============================================================
 
+def fetch_feed(url: str):
+    """Fetch and parse one feed with bounded network timeouts."""
+    with httpx.Client(
+        timeout=httpx.Timeout(12.0, connect=5.0),
+        follow_redirects=True,
+        headers={"User-Agent": "TelegramChannelPublisher/1.0"},
+    ) as client:
+        response = client.get(url)
+        response.raise_for_status()
+        return feedparser.parse(response.content)
+
+
 def get_news():
     """
     Fetch and select one relevant cybersecurity article.
@@ -1446,138 +1468,138 @@ def get_news():
     # --------------------------------------------------------
     # Fetch feeds
     # --------------------------------------------------------
-    for url in unique_feed_urls():
+    feed_urls = unique_feed_urls()
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        pending_feeds = {url: executor.submit(fetch_feed, url) for url in feed_urls}
 
-        try:
+        for url, future in pending_feeds.items():
+            try:
+                feed = future.result()
 
-            feed = feedparser.parse(
-                url
-            )
+                # Feed errors can sometimes be exposed through
+                # feedparser's bozo flag.
+                if getattr(
+                    feed,
+                    "bozo",
+                    False
+                ):
 
-            # Feed errors can sometimes be exposed through
-            # feedparser's bozo flag.
-            if getattr(
-                feed,
-                "bozo",
-                False
-            ):
+                    if VERBOSE:
+                        print(
+                            f"RSS warning: {url}"
+                        )
+
+                entries = getattr(
+                    feed,
+                    "entries",
+                    []
+                )
+
+                for item in entries[
+                    :ENTRIES_PER_FEED
+                ]:
+
+                    title = item.get(
+                        "title",
+                        ""
+                    ).strip()
+
+                    if not title:
+                        continue
+
+                    # ------------------------------------------------
+                    # Ignore old stories
+                    # ------------------------------------------------
+                    if not is_recent(item):
+                        continue
+
+                    summary = clean_summary(
+                        item.get(
+                            "summary",
+                            ""
+                        )
+                    )
+
+                    # Some feeds expose content rather than summary.
+                    if not summary:
+
+                        contents = item.get(
+                            "content",
+                            []
+                        )
+
+                        if contents:
+
+                            parts = []
+
+                            for content in contents:
+
+                                if isinstance(
+                                    content,
+                                    dict
+                                ):
+
+                                    value = content.get(
+                                        "value",
+                                        ""
+                                    )
+
+                                    if value:
+                                        parts.append(
+                                            value
+                                        )
+
+                            summary = clean_summary(
+                                " ".join(parts)
+                            )
+
+                    score, content_types = calculate_score(
+                        title,
+                        summary
+                    )
+
+                    # Ignore weak articles.
+                    if score < 15:
+                        continue
+
+                    source_meta = get_source_metadata(
+                        url
+                    )
+
+                    # ------------------------------------------------
+                    # Source weight
+                    # ------------------------------------------------
+                    weighted_score = (
+                        score
+                        * source_meta["weight"]
+                    )
+
+                    article = {
+                        "title": title,
+                        "summary": summary,
+                        "link": item.get(
+                            "link",
+                            ""
+                        ),
+                        "score": score,
+                        "weighted_score": weighted_score,
+                        "content_types": content_types,
+                        "source": url,
+                        "source_name": source_meta[
+                            "name"
+                        ],
+                    }
+
+                    articles.append(
+                        article
+                    )
+
+            except Exception as e:
 
                 if VERBOSE:
                     print(
-                        f"RSS warning: {url}"
+                        f"RSS error: {url} -> {e}"
                     )
-
-            entries = getattr(
-                feed,
-                "entries",
-                []
-            )
-
-            for item in entries[
-                :ENTRIES_PER_FEED
-            ]:
-
-                title = item.get(
-                    "title",
-                    ""
-                ).strip()
-
-                if not title:
-                    continue
-
-                # ------------------------------------------------
-                # Ignore old stories
-                # ------------------------------------------------
-                if not is_recent(item):
-                    continue
-
-                summary = clean_summary(
-                    item.get(
-                        "summary",
-                        ""
-                    )
-                )
-
-                # Some feeds expose content rather than summary.
-                if not summary:
-
-                    contents = item.get(
-                        "content",
-                        []
-                    )
-
-                    if contents:
-
-                        parts = []
-
-                        for content in contents:
-
-                            if isinstance(
-                                content,
-                                dict
-                            ):
-
-                                value = content.get(
-                                    "value",
-                                    ""
-                                )
-
-                                if value:
-                                    parts.append(
-                                        value
-                                    )
-
-                        summary = clean_summary(
-                            " ".join(parts)
-                        )
-
-                score, content_types = calculate_score(
-                    title,
-                    summary
-                )
-
-                # Ignore weak articles.
-                if score < 15:
-                    continue
-
-                source_meta = get_source_metadata(
-                    url
-                )
-
-                # ------------------------------------------------
-                # Source weight
-                # ------------------------------------------------
-                weighted_score = (
-                    score
-                    * source_meta["weight"]
-                )
-
-                article = {
-                    "title": title,
-                    "summary": summary,
-                    "link": item.get(
-                        "link",
-                        ""
-                    ),
-                    "score": score,
-                    "weighted_score": weighted_score,
-                    "content_types": content_types,
-                    "source": url,
-                    "source_name": source_meta[
-                        "name"
-                    ],
-                }
-
-                articles.append(
-                    article
-                )
-
-        except Exception as e:
-
-            if VERBOSE:
-                print(
-                    f"RSS error: {url} -> {e}"
-                )
 
     # --------------------------------------------------------
     # Nothing found
@@ -1607,10 +1629,10 @@ def get_news():
         )
     ]
 
-    # If everything has already been seen,
-    # don't completely fail. Use the full list.
-    if fresh_articles:
-        articles = fresh_articles
+    # Never republish a known story just because the feed has no fresh items.
+    if not fresh_articles:
+        return None
+    articles = fresh_articles
 
     # --------------------------------------------------------
     # Sort by weighted score
@@ -1680,13 +1702,6 @@ def get_news():
     )[0]
 
     # --------------------------------------------------------
-    # Remember selected story
-    # --------------------------------------------------------
-    remember_article(
-        selected
-    )
-
-    # --------------------------------------------------------
     # Return only the old public structure
     # --------------------------------------------------------
     #
@@ -1700,6 +1715,7 @@ def get_news():
         "score": selected["score"],
         "content_types": selected["content_types"],
         "source": selected["source"],
+        "source_name": selected["source_name"],
     }
 
 
